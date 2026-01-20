@@ -1,0 +1,189 @@
+#include <SoftwareSerial.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+
+
+// WiFi credentials
+mjf 
+const char* ssid = "OPPO A17";         // Change SSID to your WiFi network name
+const char* password = "76767678"; // Change password to your WiFi password
+
+// URLs for HTTP requests
+const char* f1 = "https://script.google.com/macros/s/AKfycbwduvY_T5vRyFm4j9oDybRt3Nbh5JYPC7SfqbkRTp0ElDrDiyYqLmoUp-XdN6IUNRek/exec?LAMPS=LAMP1&STATUS=OFFLINE&LABEL=A";
+const char* f2 = "https://script.google.com/macros/s/AKfycbwduvY_T5vRyFm4j9oDybRt3Nbh5JYPC7SfqbkRTp0ElDrDiyYqLmoUp-XdN6IUNRek/exec?LAMPS=LAMP2&STATUS=OFFLINE&LABEL=A";
+const char* f3 = "https://script.google.com/macros/s/AKfycbwduvY_T5vRyFm4j9oDybRt3Nbh5JYPC7SfqbkRTp0ElDrDiyYqLmoUp-XdN6IUNRek/exec?LAMPS=LAMP3&STATUS=OFFLINE&LABEL=A";
+const char* g1 = "https://script.google.com/macros/s/AKfycbwduvY_T5vRyFm4j9oDybRt3Nbh5JYPC7SfqbkRTp0ElDrDiyYqLmoUp-XdN6IUNRek/exec?LAMPS=LAMP1&STATUS=ONLINE&LABEL=D";
+const char* g2 = "https://script.google.com/macros/s/AKfycbwduvY_T5vRyFm4j9oDybRt3Nbh5JYPC7SfqbkRTp0ElDrDiyYqLmoUp-XdN6IUNRek/exec?LAMPS=LAMP2&STATUS=ONLINE&LABEL=D";
+const char* g3 = "https://script.google.com/macros/s/AKfycbwduvY_T5vRyFm4j9oDybRt3Nbh5JYPC7SfqbkRTp0ElDrDiyYqLmoUp-XdN6IUNRek/exec?LAMPS=LAMP3&STATUS=ONLINE&LABEL=D";
+
+// Create a HardwareSerial object for the GSM module
+SoftwareSerial gsmSerial(14,12); // Use Serial1 for GSM module (TX on GPIO17, RX on GPIO16)
+
+// Function to send AT commands and check responses
+bool sendATCommand(const String& command, unsigned long timeout = 5000) {
+  gsmSerial.println(command);
+  unsigned long start = millis();
+  String response = "";
+  while (millis() - start < timeout) {
+    while (gsmSerial.available()) {
+      char c = gsmSerial.read();
+      response += c;
+      Serial.print(c); // Print each character as it's received
+    }
+    if (response.indexOf("OK") != -1) {
+      Serial.println("Command executed successfully.");
+      return true;
+    } else if (response.indexOf("ERROR") != -1) {
+      Serial.println("Command execution failed.");
+      return false;
+    }
+  }
+  Serial.println("No response from GSM module.");
+  return false;
+}
+
+// Function to send HTTP requests
+void postToSpreadsheet(const char* url) {
+  if (WiFi.status() == WL_CONNECTED) {
+   // Check WiFi connection status
+    WiFiClientSecure client;
+    client.setInsecure(); // Bypass SSL certificate verification (not recommended for production)
+    HTTPClient http;  // Create an HTTP client object
+    http.begin(client, url);  // Specify thttpshe URL and client
+    int httpCode = http.GET();  // Send the request
+    String payload = http.getString();  // Get the response payload
+    Serial.println(httpCode);  // Print HTTP return code
+    Serial.println(payload); 
+   // disphash(payload); // Print request response payload
+    if (httpCode > 0) { // Check for the returning code
+        // Print request response payload
+    } else {
+      Serial.print("Error on HTTP request: ");
+      Serial.println(http.errorToString(httpCode)); // Print the error message
+    }
+}
+}
+
+// Function to process received SMS
+void processSMS(const String& sms) {
+  String myString = sms;
+
+  // Print SMS for debugging
+  Serial.println("Processing SMS:");
+  Serial.println(myString);
+
+  // Strip any extra newlines or carriage returns
+  myString.trim();
+
+  if (myString.indexOf("000") != -1) {
+    Serial.println("String contains \"000\"");
+    postToSpreadsheet(g1);
+    postToSpreadsheet(g2);
+    postToSpreadsheet(g3);
+  }
+
+  if (myString.indexOf("100") != -1) {
+    Serial.println("REPORTING LAMP1:");
+    postToSpreadsheet(f1);
+    postToSpreadsheet(g2);
+    postToSpreadsheet(g3);
+  }
+
+  if (myString.indexOf("010") != -1) {
+    Serial.println("REPORTING LAMP2:");
+    postToSpreadsheet(f2);
+      postToSpreadsheet(g1);
+    postToSpreadsheet(g3);
+  }
+
+  if (myString.indexOf("001") != -1) {
+    Serial.println("REPORTING LAMP3:");
+    postToSpreadsheet(f3);
+      postToSpreadsheet(g2);
+    postToSpreadsheet(g1);
+  }
+
+  if (myString.indexOf("011") != -1) {
+    Serial.println("REPORTING LAMP2&3:");
+    postToSpreadsheet(f3);
+    postToSpreadsheet(f2);
+      postToSpreadsheet(g1);
+  }
+
+  if (myString.indexOf("111") != -1) {
+    Serial.println("REPORTING ALL LAMP:");
+    postToSpreadsheet(f3);
+    postToSpreadsheet(f2);
+    postToSpreadsheet(f1);
+  }
+
+  if (myString.indexOf("101") != -1) {
+    Serial.println("REPORTING LAMP1&3:");
+    postToSpreadsheet(f3);
+    postToSpreadsheet(f1);
+      postToSpreadsheet(g2);
+  
+  }
+
+  if (myString.indexOf("110") != -1) {
+    Serial.println("REPORTING LAMP1&2:");
+    postToSpreadsheet(f1);
+    postToSpreadsheet(f2);
+    postToSpreadsheet(g3);
+  }
+}
+
+void setup() {
+  Serial.begin(9600);      // Start serial communication with the PC
+  gsmSerial.begin(9600); // Initialize GSM module (RX on GPIO16, TX on GPIO17)
+
+  delay(2000);               // Wait for GSM module to initialize
+
+  Serial.println("Sending AT command to GSM module...");
+  if (!sendATCommand("AT")) return;
+
+  delay(1000); // Ensure the module has time to process the command
+
+  Serial.println("Setting SMS mode to text...");
+  if (!sendATCommand("AT+CMGF=1")) return;
+
+  delay(1000); // Ensure the module has time to process the command
+
+  Serial.println("Setting SMS text mode parameters...");
+  if (!sendATCommand("AT+CSMP=49,167,0,0")) return;
+
+  delay(1000); // Ensure the module has time to process the command
+
+  Serial.println("Enabling SMS notifications...");
+  if (!sendATCommand("AT+CNMI=1,2,0,0,0")) return;
+
+  Serial.println("Ready to receive SMS.");
+  
+  Serial.print("Connecting to WiFi: ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("Connected to WiFi.");
+}
+
+void loop() {
+  // Check for incoming messages
+  if (gsmSerial.available()) {
+    String sms = "";
+    while (gsmSerial.available()) {
+      char c = gsmSerial.read();
+      sms += c;
+      delay(10); // Small delay to avoid reading incomplete data
+    }
+
+    // Print the received SMS for debugging
+    Serial.println("Received SMS:");
+    Serial.println(sms);
+
+    // Process the SMS
+    processSMS(sms);
+  }
+}
