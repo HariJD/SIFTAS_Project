@@ -1,0 +1,238 @@
+#include <SoftwareSerial.h>
+
+// Create a SoftwareSerial object named 'gsm'
+SoftwareSerial gsm(9, 10); // RX, TX for GSM module
+
+// Define the pin for LDR sensors
+const int ldrPins[3] = {A0, A1, A2}; // Analog pins connected to LDRs
+const int numLDRs = 2;
+
+// Define the light threshold value
+const int lightThreshold = 120; // Adjust this value based on your setup
+
+// Define delay to show defective light and to avoid sending too many SMS
+const unsigned long defectDelay = 5000; // 5 seconds delay
+unsigned long previousMillis = 0; // Store the last time a defective light was detected
+bool defectDetected = false; // Flag to indicate if a defect has been detected
+
+// Function to send AT commands and check responses
+bool sendATCommand(String command, String expectedResponse, unsigned long timeout = 5000) {
+  gsm.println(command);
+  unsigned long start = millis();
+  String response = "";
+  while (millis() - start < timeout) {
+    while (gsm.available()) {
+      char c = gsm.read();
+      response += c;
+      Serial.print(c); // Print each character as it's received
+    }
+    if (response.indexOf(expectedResponse) != -1) {
+      Serial.println("Command executed successfully.");
+      return true;
+    } else if (response.indexOf("ERROR") != -1) {
+      Serial.println("Command execution failed.");
+      return false;
+    }
+  }
+  Serial.println("No response from GSM module.");
+  return false;
+}
+
+// Function to send SMS
+void sendSMS(String message) {
+  Serial.println("Preparing to send SMS...");
+  if (!sendATCommand("AT+CMGF=1", "OK")) {
+
+    return;
+  }
+
+  delay(500); // Ensure the module has time to process the command
+
+  gsm.println("AT+CMGS=\"+919677342261\""); // Replace with the recipient's phone number
+  delay(1000); // Short delay to ensure command is processed
+
+  // Check for prompt '>'
+  String response = "";
+  unsigned long timeout = millis() + 5000; // 5 seconds timeout
+  while (millis() < timeout) {
+    while (gsm.available()) {
+      char c = gsm.read();
+      response += c;
+      Serial.print(c); // Print each character as it's received
+    }
+    if (response.indexOf('>') != -1) {
+      Serial.println("Prompt received, sending message...");
+      break;
+    }
+  }
+
+  if (response.indexOf('>') != -1) {
+    gsm.print(message); // Send the custom message
+    gsm.write(26); // ASCII code of CTRL+Z to send SMS
+
+    // Check for final response after sending SMS
+    response = "";
+    timeout = millis() + 10000; // 10 seconds timeout
+    while (millis() < timeout) {
+      while (gsm.available()) {
+        char c = gsm.read();
+        response += c;
+        Serial.print(c); // Print each character as it's received
+      }
+      if (response.indexOf("OK") != -1) {
+        Serial.println("SMS sent successfully.");
+        return;
+      } else if (response.indexOf("ERROR") != -1) {
+        Serial.println("Failed to send SMS.");
+        return;
+      }
+    }
+    Serial.println("No response from GSM module after sending SMS.");
+  } else {
+    Serial.println("Failed to receive prompt for SMS message.");
+  }
+}
+// Function to send SMS
+void sendSMS1(String message) {
+  Serial.println("Preparing to send SMS...");
+  if (!sendATCommand("AT+CMGF=1", "OK")) {
+    Serial.println("Failed to set SMS mode to text.");
+    return;
+  }
+
+  delay(500); // Ensure the module has time to process the command
+
+  gsm.println("AT+CMGS=\"+919677342261\""); // Replace with the recipient's phone number
+  delay(1000); // Short delay to ensure command is processed
+
+  // Check for prompt '>'
+  String response = "";
+  unsigned long timeout = millis() + 5000; // 5 seconds timeout
+  while (millis() < timeout) {
+    while (gsm.available()) {
+      char c = gsm.read();
+      response += c;
+      Serial.print(c); // Print each character as it's received
+    }
+    if (response.indexOf('>') != -1) {
+      Serial.println("Prompt received, sending message...");
+      break;
+    }
+  }
+
+  if (response.indexOf('>') != -1) {
+    gsm.print(message); // Send the custom message
+    gsm.write(26); // ASCII code of CTRL+Z to send SMS
+
+    // Check for final response after sending SMS
+    response = "";
+    timeout = millis() + 10000; // 10 seconds timeout
+    while (millis() < timeout) {
+      while (gsm.available()) {
+        char c = gsm.read();
+        response += c;
+        Serial.print(c); // Print each character as it's received
+      }
+      if (response.indexOf("OK") != -1) {
+        Serial.println("SMS sent successfully.");
+        return;
+      } else if (response.indexOf("ERROR") != -1) {
+        Serial.println("Failed to send SMS.");
+        return;
+      }
+    }
+    Serial.println("No response from GSM module after sending SMS.");
+  } else {
+    Serial.println("Failed to receive prompt for SMS message.");
+  }
+}
+ String binout() {
+  int ldr1Value = analogRead(ldrPins[1]);
+  int ldr2Value = analogRead(ldrPins[2]);
+  int ldr3Value = analogRead(ldrPins[3]);
+
+  String binaryOutput = "[";
+
+  if (ldr1Value > lightThreshold) {
+    binaryOutput += "1";
+  } else {
+    binaryOutput += "0";
+  }
+
+  if (ldr2Value > lightThreshold) {
+    binaryOutput += "1";
+  } else {
+    binaryOutput += "0";
+  }
+
+  if (ldr3Value >lightThreshold) {
+    binaryOutput += "1";
+  } else {
+    binaryOutput += "0";
+  }
+
+  binaryOutput += "]";
+  Serial.println(binaryOutput);
+ 
+  if (binaryOutput.indexOf("1") != -1) {
+    Serial.println("Yes");
+  }
+   return binaryOutput;
+}
+
+void setup() {
+  Serial.begin(9600); // Start serial communication with the PC
+  gsm.begin(9600); // Start serial communication with the GSM module
+
+  delay(3000); // Wait for GSM module to initialize
+
+  Serial.println("Sending AT command to GSM module...");
+  if (!sendATCommand("AT", "OK")) return;
+
+  delay(1000); // Ensure the module has time to process the command
+
+  Serial.println("Checking network registration...");
+  if (!sendATCommand("AT+CREG?", "OK")) return;
+
+  delay(1000); // Ensure the module has time to process the command
+}
+
+void loop() {
+  unsigned long currentMillis = millis(); // Get the current time
+  bool anyLDRBelowThreshold = false;
+
+
+
+  for (int i = 0; i < numLDRs; i++) {
+    int ldrValue = analogRead(ldrPins[i]);
+    Serial.print("Light Level of LDR ");
+    Serial.print(i + 1);
+    Serial.print(": ");
+    Serial.println(ldrValue);
+
+    Serial.println(binout());
+    if (ldrValue > lightThreshold && !defectDetected) {
+      // If the light level is below the threshold and defect not yet detected
+      String message = "code: "+ binout() + "Light " + String(i + 1) + " is defective";
+      Serial.println("Defect Detected :" + message);
+      sendSMS(message);
+      delay(1000);
+      sendSMS1(message); // Send SMS with the defect information
+      defectDetected = true; // Set the flag to true to prevent multiple messages
+      previousMillis = currentMillis; // Record the time of detection
+      break; // Exit the loop once a defect is detected
+    }
+  }
+
+  // Display if no defect is detected
+  if (!anyLDRBelowThreshold && !defectDetected) {
+    Serial.println("All LDRs are above the threshold.");
+  }
+
+  // Check if the delay period has passed to reset the defect detection
+  if (defectDetected && currentMillis - previousMillis >= defectDelay) {
+    defectDetected = false; // Reset the flag to resume monitoring
+  }
+
+  delay(1000); // Check the light level every second
+}
